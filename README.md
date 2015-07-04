@@ -10,6 +10,9 @@ This container can be used to easily manage Elasticsearch snapshots.
 * `ELASTICSEARCH_URL` *(default: `http://elasticsearch-9200.service.consul:9200`)*
   * The URL to reach your Elasticsearch server.
   * **NOTE**: This must be the **entire** hostname or IP. Hostnames that expect a search domain to be added will not work.
+* `ESS_ABORT_IF_EMPTY` *(default: true)*
+  * This will abort the snapshot process if there are no indices on the server.
+  * This is useful if you just bootstrapped a cluster, and want to restore before doing any backups. The repository will still be created, but no snapshots will be created until there are indices on the server.
 * `ESS_CREATE_IF_MISSING` *(defaut: false)*
   * If this is `true` and the snapshot repository does not exist, then attempt to create it. See the [Repository Auto-Creation](#repository-auto-creation) section for more information.
 * `ESS_MAX_SNAPSHOTS` *(defaut: 0)*
@@ -33,7 +36,7 @@ If `ESS_CREATE_IF_MISSING` is set to `true` then the following are relevant:
 
 An example creation payload construction:
 
-```bash
+```text
 ESS_CREATE_IF_MISSING=true
 ESS_REPO_TYPE=s3
 ESS_REPO_SETTINGS_BUCKET=mybucket

@@ -6,6 +6,7 @@ create_if_missing=${ESS_CREATE_IF_MISSING-false}
 max_snapshots=${ESS_MAX_SNAPSHOTS-0}
 wait_for_completion=${ESS_WAIT_FOR_COMPLETION-true}
 snapshot_prefix=${ESS_SNAPSHOT_PREFIX-"scheduled-"}
+abort_if_empty=${ESS_ABORT_IF_EMPTY-true}
 
 snapshot_timestamp=$(date -u +%s)
 snapshot_name="${snapshot_prefix}${snapshot_timestamp}"
@@ -54,6 +55,22 @@ if [[ $repository_exists == "false" ]]; then
     exit 2
   fi
 fi
+
+
+
+if [[ $abort_if_empty == "true" ]]; then
+  echo "Checking index count..."
+
+  indices_count=$(curl -s $ELASTICSEARCH_URL/_stats/docs | jq --raw-output '.indices | length')
+  if [[ $indices_count -eq 0 ]]; then
+    echo "WARNING: This server has no indices and ESS_ABORT_IF_EMPTY was set to true"
+
+    # exit with 0 because this is sort of a success
+    exit 0
+  fi
+fi
+
+
 
 # Check for existing number of snapshots
 snapshot_list=$(curl -s $ELASTICSEARCH_URL/_snapshot/$repo_name/_all)
