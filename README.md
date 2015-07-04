@@ -20,6 +20,7 @@ This assumes you have installed and properly configured the Elasticsearch [cloud
   * Whether the execution should wait until the snapshot has been created before exiting.
 
 If `ESS_CREATE_IF_MISSING` is set to `true` then the following are **required**:
+
 * `ESS_REPO_SETTINGS`
   * A json payload that represents the `settings` part of a repository creation.
 * `ESS_REPO_TYPE`
