@@ -1,12 +1,21 @@
 #!/bin/bash
 
-ELASTICSEARCH_URL=${ELASTICSEARCH_URL-"http://elasticsearch-9200:9200"}
+ELASTICSEARCH_URL=${ELASTICSEARCH_URL-"http://elasticsearch-9200.service.consul:9200"}
 repo_name=${ESS_REPO_NAME?"You must include a repository name"}
 create_if_missing=${ESS_CREATE_IF_MISSING-false}
 max_snapshots=${ESS_MAX_SNAPSHOTS-100}
 wait_for_completion=${ESS_WAIT_FOR_COMPLETION-true}
+snapshot_prefix=${ESS_SNAPSHOT_PREFIX-"scheduled-"}
 
 snapshot_timestamp=$(date -u +%s)
+snapshot_name="${snapshot_prefix}${snapshot_timestamp}"
+
+# Check to make sure elasticsearch is actually up and running
+es_status=$(curl -s $ELASTICSEARCH_URL/ | jq --raw-output .status)
+if [[ $es_status != "200" ]]; then
+  echo "ERROR: Elasticsearch appears to be down?"
+  exit 1;
+fi
 
 # Check to see if the repo exists and create if necessary
 repository_exists=$(curl -s $ELASTICSEARCH_URL/_snapshot/ | jq --raw-output "has(\"$repo_name\")")
@@ -26,11 +35,11 @@ if [[ $repository_exists == "false" ]]; then
     else
       echo "ERROR: Unable to create repository '$repo_name'"
       echo $create_result
-      exit 1
+      exit 3
     fi
   else
     echo "ERROR: Repository '$repo_name' does not exist!"
-    exit 1;
+    exit 2
   fi
 fi
 
@@ -38,30 +47,39 @@ fi
 snapshot_list=$(curl -s $ELASTICSEARCH_URL/_snapshot/$repo_name/_all)
 
 # Does this snapshot already exist??
-already_exists_count=$(echo $snapshot_list | jq --raw-output ".snapshots[].snapshot | contains(\"scheduled-$snapshot_timestamp\")" | grep -c true)
+already_exists_count=$(echo $snapshot_list | jq --raw-output ".snapshots[] | select(.state == \"SUCCESS\") | .snapshot" | grep -c $snapshot_name)
 if [[ $already_exists_count -gt 0 ]]; then
-  echo "ERROR: The snapshot 'scheduled-$snapshot_timestamp' already exists in the repository '$repo_name'. Please wait 1 second."
-  exit 1
+  echo "ERROR: The snapshot '$snapshot_name' already exists in the repository '$repo_name'. Please wait 1 second."
+  exit 4
 fi
 
 # We only bother with deletions if the max_snapshots is greater than 0
 if [[ $max_snapshots -gt 0 ]]; then
 
   # How many of OUR snapshots already exist
-  num_snapshots=$(echo $snapshot_list | jq --raw-output ".snapshots[].snapshot" | grep -E ^scheduled- | wc -l)
+  num_snapshots=$(echo $snapshot_list | jq "[.snapshots[] | select(.state == \"SUCCESS\") | select(.snapshot | startswith(\"$snapshot_prefix\")) | .snapshot] | length")
 
   # Check if we need to delete any
   if [[ $num_snapshots -ge $max_snapshots ]]; then
     num_snaps_to_remove=$(expr $num_snapshots - $max_snapshots)
     echo "Found $num_snapshots existing snapshots. Maximum is $max_snapshots. Deleting $num_snaps_to_remove older snapshots"
 
-    for snapshot in $(echo $snapshot_list | jq --raw-output ".snapshots[].snapshot" | grep -E ^scheduled- | head -n $num_snaps_to_remove ); do
+    for snapshot in $(echo $snapshot_list | jq --raw-output "[.snapshots[] | select(.state == \"SUCCESS\") | select(.snapshot | startswith(\"$snapshot_prefix\")) | .snapshot][0:$num_snaps_to_remove] | .[]"); do
       echo "Deleting snapshot $snapshot"
 
-      curl -s -XDELETE $ELASTICSEARCH_URL/_snapshot/$repo_name/$snapshot
+      del_result=$(curl -s -XDELETE $ELASTICSEARCH_URL/_snapshot/$repo_name/$snapshot)
+      if [[ "$(echo $del_result | jq --raw-output .acknowledged)" == "true" ]]; then
+        echo "Deleted snapshot $snapshot"
+      else
+        echo "WARNING: Unable to delete snapshot $snapshot"
+        echo $(echo $del_result | jq --raw-output .error)
+      fi
     done
+  else
+    echo "Found $num_snapshots existing snapshots. Maximum is $max_snapshots. No snapshots will be deleted."
   fi
-
+else
+  echo "Snapshot pruning has been disabled."
 fi
 
 
@@ -82,4 +100,4 @@ fi
 
 echo "ERROR: Failed to create snapshot 'scheduled-$snapshot_timestamp' in '$repo_name'"
 echo $result
-exit 1;
+exit 5;

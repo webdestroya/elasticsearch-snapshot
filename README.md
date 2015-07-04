@@ -6,8 +6,9 @@ This assumes you have installed and properly configured the Elasticsearch [cloud
 
 ## Environment Variables
 
-* `ELASTICSEARCH_URL` *(default: `http://elasticsearch-9200:9200`)*
-  * The URL to reach your Elasticsearch server
+* `ELASTICSEARCH_URL` *(default: `http://elasticsearch-9200.service.consul:9200`)*
+  * The URL to reach your Elasticsearch server.
+  * **NOTE**: This must be the **entire** hostname or IP. Hostnames that expect a search domain to be added will not work.
 * `ESS_CREATE_IF_MISSING` *(defaut: false)*
   * If this is `true` and the snapshot repository does not exist, then attempt to create it.
 * `ESS_MAX_SNAPSHOTS` *(defaut: 100)*
@@ -44,7 +45,6 @@ WantedBy=multi-user.target
 [X-Fleet]
 Conflicts=%p.timer
 MachineOf=%p.service
-
 ```
 
 ```
@@ -61,7 +61,7 @@ Type=simple
 ExecStartPre=-/usr/bin/docker pull webdestroya/elasticsearch-snapshot
 
 ExecStart=/usr/bin/docker run --rm=true \
-  -e ELASTICSEARCH_URL=http://elasticsearch-9200:9200 \
+  -e ELASTICSEARCH_URL=http://elasticsearch-9200.service.consul:9200 \
   -e ESS_REPO_NAME=s3_repository \
   -e ESS_MAX_SNAPSHOTS=100 \
   -e ESS_WAIT_FOR_COMPLETION=true \
@@ -72,5 +72,4 @@ WantedBy=multi-user.target
 
 [X-Fleet]
 Conflicts=%p.service
-
 ```
