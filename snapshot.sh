@@ -3,7 +3,7 @@
 ELASTICSEARCH_URL=${ELASTICSEARCH_URL-"http://elasticsearch-9200.service.consul:9200"}
 repo_name=${ESS_REPO_NAME?"You must include a repository name"}
 create_if_missing=${ESS_CREATE_IF_MISSING-false}
-max_snapshots=${ESS_MAX_SNAPSHOTS-100}
+max_snapshots=${ESS_MAX_SNAPSHOTS-0}
 wait_for_completion=${ESS_WAIT_FOR_COMPLETION-true}
 snapshot_prefix=${ESS_SNAPSHOT_PREFIX-"scheduled-"}
 
@@ -23,12 +23,24 @@ if [[ $repository_exists == "false" ]]; then
   if [[ $create_if_missing == "true" ]]; then
 
     repo_type=${ESS_REPO_TYPE?"You must provide the repository type"}
-    repo_settings=${ESS_REPO_SETTINGS?"You must provide the repository settings json"}
+    #repo_settings=${ESS_REPO_SETTINGS?"You must provide the repository settings json"}
 
     echo "Repository '$repo_name' missing, creating"
 
-    create_result=$(curl -s -XPUT $ELASTICSEARCH_URL/_snapshot/$repo_name -d "{\"type\":\"$repo_type\",\"settings\":$repo_settings}")
+    # Build up the JSON payload
+    settings_list=()
+    for VAR in `env`; do
+      if [[ "$VAR" =~ ^ESS_REPO_SETTINGS_ ]]; then
+        repo_setting_key=$(echo "$VAR" | gsed -r "s/ESS_REPO_SETTINGS_(.*)=.*/\1/g" | tr '[:upper:]' '[:lower:]')
+        repo_setting_envvar=$(echo "$VAR" | gsed -r "s/(.*)=.*/\1/g")
+        settings_list+=( $(printf '"%s":"%s"' $repo_setting_key ${!repo_setting_envvar}) )
+      fi
+    done
+    settings_hash=$(printf ",%s" "${settings_list[@]}")
+    settings_json=${settings_hash:1}
+    json=$(printf '{"type":"%s","settings":{%s}}' $repo_type $settings_json)
 
+    create_result=$(curl -s -XPUT $ELASTICSEARCH_URL/_snapshot/$repo_name -d $json)
     result=$(echo $create_result | jq --raw-output .acknowledged)
     if [[ $result == "true" ]]; then
       echo "Repository '$repo_name' created!"

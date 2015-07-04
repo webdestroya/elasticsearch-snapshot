@@ -3,9 +3,11 @@ FROM gliderlabs/alpine:3.1
 MAINTAINER Mitch Dempsey <mitch@mitchdempsey.com>
 
 RUN apk --update add \
+    bash \
     curl \
     jq \
-    bash
+    sed \
+    && ln -s /bin/sed /bin/gsed
 
 COPY snapshot.sh /snapshot.sh
 
